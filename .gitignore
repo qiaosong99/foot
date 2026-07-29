@@ -1,0 +1,7 @@
+node_modules/
+dist/
+*.db
+uploads/
+.qoder/
+foot example/
+.DS_Store

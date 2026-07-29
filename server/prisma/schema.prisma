@@ -1,0 +1,154 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+// 管理员用户
+model AdminUser {
+  id        Int      @id @default(autoincrement())
+  username  String   @unique
+  password  String
+  nickname  String   @default("管理员")
+  role      String   @default("admin") // admin, operator
+  status    Int      @default(1) // 1启用 0禁用
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// 菜品分类
+model Category {
+  id        Int       @id @default(autoincrement())
+  name      String
+  sort      Int       @default(0)
+  status    Int       @default(1) // 1启用 0禁用
+  icon      String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  products  Product[]
+}
+
+// 菜品/商品
+model Product {
+  id          Int           @id @default(autoincrement())
+  name        String
+  categoryId  Int
+  category    Category      @relation(fields: [categoryId], references: [id])
+  price       Float
+  image       String?
+  images      String? // 多图JSON
+  description String?
+  unit        String        @default("份")
+  sort        Int           @default(0)
+  status      Int           @default(1) // 1上架 0下架
+  sales       Int           @default(0)
+  isHot       Int           @default(0)
+  isDiscount  Int           @default(0)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  specs       ProductSpec[]
+  orderItems  OrderItem[]
+}
+
+// 菜品规格
+model ProductSpec {
+  id        Int     @id @default(autoincrement())
+  productId Int
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  name      String // 规格名 如"大小"
+  values    String // JSON数组 如["大份","小份"]
+}
+
+// 桌台
+model DiningTable {
+  id        Int      @id @default(autoincrement())
+  tableNo   String   @unique // 桌号
+  seats     Int      @default(4) // 座位数
+  status    Int      @default(0) // 0空闲 1使用中
+  qrCodeUrl String? // 二维码图片路径
+  area      String? // 区域 如"大厅"、"包间"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  orders    Order[]
+}
+
+// 订单
+model Order {
+  id         Int         @id @default(autoincrement())
+  orderNo    String      @unique // 订单编号
+  tableId    Int
+  table      DiningTable @relation(fields: [tableId], references: [id])
+  status     Int         @default(0) // 0待制作 1制作中 2已上菜 3已完成 4已取消
+  totalPrice Float       @default(0)
+  remark     String?
+  itemCount  Int         @default(0)
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+  items      OrderItem[]
+}
+
+// 订单明细
+model OrderItem {
+  id        Int     @id @default(autoincrement())
+  orderId   Int
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId Int
+  product   Product @relation(fields: [productId], references: [id])
+  name      String // 菜品名称快照
+  specInfo  String? // 规格信息快照
+  quantity  Int     @default(1)
+  price     Float // 单价快照
+  status    Int     @default(0) // 0待制作 1已上菜
+}
+
+// 会员
+model Member {
+  id        Int      @id @default(autoincrement())
+  nickname  String?
+  phone     String?  @unique
+  avatar    String?
+  balance   Float    @default(0)
+  points    Int      @default(0)
+  status    Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// 优惠券
+model Coupon {
+  id        Int      @id @default(autoincrement())
+  name      String
+  type      Int      @default(1) // 1满减券 2折扣券
+  value     Float // 面值或折扣
+  minAmount Float    @default(0) // 最低消费
+  startTime DateTime?
+  endTime   DateTime?
+  total     Int      @default(100)
+  used      Int      @default(0)
+  status    Int      @default(1) // 1启用 0禁用
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// 广告位
+model Ad {
+  id        Int      @id @default(autoincrement())
+  title     String
+  image     String
+  url       String?
+  sort      Int      @default(0)
+  status    Int      @default(1) // 1启用 0禁用
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// 系统设置
+model Setting {
+  id        Int      @id @default(autoincrement())
+  key       String   @unique
+  value     String
+  updatedAt DateTime @updatedAt
+}
