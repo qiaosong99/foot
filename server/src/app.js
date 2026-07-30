@@ -10,6 +10,8 @@ const adminRoutes = require('./routes/admin');
 const customerRoutes = require('./routes/customer');
 const kitchenRoutes = require('./routes/kitchen');
 const uploadRoutes = require('./routes/upload');
+const waiterRoutes = require('./routes/waiter');
+const printerRoutes = require('./routes/printer');
 
 const app = express();
 const server = http.createServer(app);
@@ -38,6 +40,8 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/customer', customerRoutes);
 app.use('/api/kitchen', kitchenRoutes);
 app.use('/api/upload', uploadRoutes);
+app.use('/api/waiter', waiterRoutes);
+app.use('/api/admin/printer', printerRoutes);
 
 // 生产环境：托管前端静态文件
 const adminDist = path.join(__dirname, '../../admin/dist');

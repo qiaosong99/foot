@@ -7,6 +7,7 @@ const path = require('path');
 const fs = require('fs');
 const prisma = require('../services/prisma');
 const { authMiddleware, JWT_SECRET } = require('../middleware/auth');
+const { notifySettleComplete, notifyTableStatusChange, notifyKitchenNewOrder } = require('../socket');
 
 // ==================== 登录 ====================
 router.post('/login', async (req, res) => {
@@ -585,6 +586,211 @@ router.put('/decoration', authMiddleware, async (req, res) => {
       create: { key: 'decoration', value: JSON.stringify(decoration) }
     });
     res.json({ code: 200, message: '保存成功', data: null });
+  } catch (err) {
+    res.status(500).json({ code: 500, message: err.message, data: null });
+  }
+});
+
+// ==================== 结算管理 ====================
+// 获取待结算订单列表
+router.get('/settle-pending', authMiddleware, async (req, res) => {
+  try {
+    const orders = await prisma.order.findMany({
+      where: { settleStatus: 1 },
+      include: { items: true, table: true },
+      orderBy: { updatedAt: 'asc' }
+    });
+    res.json({ code: 200, message: 'ok', data: orders });
+  } catch (err) {
+    res.status(500).json({ code: 500, message: err.message, data: null });
+  }
+});
+
+// 后台确认结算
+router.put('/orders/:id/settle', authMiddleware, async (req, res) => {
+  try {
+    const orderId = parseInt(req.params.id);
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      include: { items: true, table: true }
+    });
+    if (!order) {
+      return res.json({ code: 404, message: '订单不存在', data: null });
+    }
+    if (order.settleStatus === 2) {
+      return res.json({ code: 400, message: '订单已结算', data: null });
+    }
+
+    // 更新订单状态
+    const updatedOrder = await prisma.order.update({
+      where: { id: orderId },
+      data: { settleStatus: 2, status: 3, settledAt: new Date() },
+      include: { items: true, table: true }
+    });
+
+    // 检查该桌是否还有其他未结算订单
+    const remainingOrders = await prisma.order.count({
+      where: { tableId: order.tableId, settleStatus: { not: 2 }, status: { not: 4 } }
+    });
+
+    // 如果没有未结算订单，释放桌台
+    if (remainingOrders === 0) {
+      await prisma.diningTable.update({
+        where: { id: order.tableId },
+        data: { status: 0 }
+      });
+      notifyTableStatusChange({ ...order.table, status: 0 });
+    }
+
+    // 通知顾客端结算完成
+    notifySettleComplete(order.table.tableNo, [updatedOrder]);
+
+    res.json({ code: 200, message: '结算成功', data: updatedOrder });
+  } catch (err) {
+    res.status(500).json({ code: 500, message: err.message, data: null });
+  }
+});
+
+// 整桌结算（一次性结算某桌所有订单）
+router.put('/tables/:id/settle-all', authMiddleware, async (req, res) => {
+  try {
+    const tableId = parseInt(req.params.id);
+    const table = await prisma.diningTable.findUnique({ where: { id: tableId } });
+    if (!table) {
+      return res.json({ code: 404, message: '桌台不存在', data: null });
+    }
+
+    // 获取该桌所有未结算订单
+    const orders = await prisma.order.findMany({
+      where: { tableId, settleStatus: { not: 2 }, status: { not: 4 } },
+      include: { items: true, table: true }
+    });
+
+    if (orders.length === 0) {
+      return res.json({ code: 400, message: '没有可结算的订单', data: null });
+    }
+
+    // 批量更新
+    await prisma.order.updateMany({
+      where: { tableId, settleStatus: { not: 2 }, status: { not: 4 } },
+      data: { settleStatus: 2, status: 3, settledAt: new Date() }
+    });
+
+    // 释放桌台
+    await prisma.diningTable.update({
+      where: { id: tableId },
+      data: { status: 0 }
+    });
+
+    notifyTableStatusChange({ ...table, status: 0 });
+    notifySettleComplete(table.tableNo, orders);
+
+    res.json({ code: 200, message: `已结算 ${orders.length} 笔订单`, data: orders });
+  } catch (err) {
+    res.status(500).json({ code: 500, message: err.message, data: null });
+  }
+});
+
+// ==================== 外卖管理 ====================
+// 创建外卖订单
+router.post('/takeout/orders', authMiddleware, async (req, res) => {
+  try {
+    const { tableNo, items, remark } = req.body;
+    if (!tableNo || !items || items.length === 0) {
+      return res.json({ code: 400, message: '订单信息不完整', data: null });
+    }
+
+    const table = await prisma.diningTable.findUnique({ where: { tableNo } });
+    if (!table) {
+      return res.json({ code: 404, message: '外卖桌台不存在', data: null });
+    }
+
+    let totalPrice = 0;
+    let itemCount = 0;
+    const orderItems = [];
+
+    for (const item of items) {
+      const product = await prisma.product.findUnique({ where: { id: item.productId } });
+      if (!product || product.status !== 1) {
+        return res.json({ code: 400, message: `菜品“${item.name || item.productId}”不可用`, data: null });
+      }
+      totalPrice += product.price * item.quantity;
+      itemCount += item.quantity;
+      orderItems.push({
+        productId: product.id,
+        name: product.name,
+        specInfo: item.specInfo || null,
+        quantity: item.quantity,
+        price: product.price
+      });
+    }
+
+    const now = new Date();
+    const orderNo = `TK${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`;
+
+    const order = await prisma.order.create({
+      data: {
+        orderNo,
+        tableId: table.id,
+        totalPrice,
+        itemCount,
+        remark: remark || null,
+        orderType: 'takeout',
+        items: { create: orderItems }
+      },
+      include: { items: true, table: true }
+    });
+
+    await prisma.diningTable.update({ where: { id: table.id }, data: { status: 1 } });
+    notifyKitchenNewOrder(order);
+    notifyTableStatusChange({ ...table, status: 1 });
+
+    res.json({ code: 200, message: '外卖订单创建成功', data: order });
+  } catch (err) {
+    res.status(500).json({ code: 500, message: err.message, data: null });
+  }
+});
+
+// ==================== 大屏 ====================
+// 获取所有桌台实时状态
+router.get('/screen/tables', authMiddleware, async (req, res) => {
+  try {
+    const tables = await prisma.diningTable.findMany({
+      orderBy: { tableNo: 'asc' },
+      include: {
+        orders: {
+          where: { settleStatus: { not: 2 }, status: { not: 4 } },
+          include: { items: true },
+          orderBy: { createdAt: 'desc' }
+        }
+      }
+    });
+
+    // 计算每桌的消费金额和订单摘要
+    const result = tables.map(table => {
+      const activeOrders = table.orders;
+      const totalAmount = activeOrders.reduce((sum, o) => sum + o.totalPrice, 0);
+      const totalItems = activeOrders.reduce((sum, o) => sum + o.itemCount, 0);
+      const hasSettleRequest = activeOrders.some(o => o.settleStatus === 1);
+      const firstOrderTime = activeOrders.length > 0 ? activeOrders[activeOrders.length - 1].createdAt : null;
+
+      return {
+        id: table.id,
+        tableNo: table.tableNo,
+        seats: table.seats,
+        status: table.status,
+        type: table.type,
+        area: table.area,
+        totalAmount,
+        totalItems,
+        orderCount: activeOrders.length,
+        hasSettleRequest,
+        firstOrderTime,
+        orders: activeOrders
+      };
+    });
+
+    res.json({ code: 200, message: 'ok', data: result });
   } catch (err) {
     res.status(500).json({ code: 500, message: err.message, data: null });
   }

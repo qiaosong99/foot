@@ -68,6 +68,7 @@ model DiningTable {
   tableNo   String   @unique // 桌号
   seats     Int      @default(4) // 座位数
   status    Int      @default(0) // 0空闲 1使用中
+  type      String   @default("dine_in") // dine_in堂食, takeout外卖
   qrCodeUrl String? // 二维码图片路径
   area      String? // 区域 如"大厅"、"包间"
   createdAt DateTime @default(now())
@@ -77,17 +78,20 @@ model DiningTable {
 
 // 订单
 model Order {
-  id         Int         @id @default(autoincrement())
-  orderNo    String      @unique // 订单编号
-  tableId    Int
-  table      DiningTable @relation(fields: [tableId], references: [id])
-  status     Int         @default(0) // 0待制作 1制作中 2已上菜 3已完成 4已取消
-  totalPrice Float       @default(0)
-  remark     String?
-  itemCount  Int         @default(0)
-  createdAt  DateTime    @default(now())
-  updatedAt  DateTime    @updatedAt
-  items      OrderItem[]
+  id           Int         @id @default(autoincrement())
+  orderNo      String      @unique // 订单编号
+  tableId      Int
+  table        DiningTable @relation(fields: [tableId], references: [id])
+  status       Int         @default(0) // 0待制作 1制作中 2已上菜 3已完成 4已取消
+  settleStatus Int         @default(0) // 0未结算 1请求结算 2已结算
+  orderType    String      @default("dine_in") // dine_in堂食, takeout外卖, waiter服务员代点
+  totalPrice   Float       @default(0)
+  remark       String?
+  itemCount    Int         @default(0)
+  settledAt    DateTime? // 结算时间
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  items        OrderItem[]
 }
 
 // 订单明细
@@ -151,4 +155,35 @@ model Setting {
   key       String   @unique
   value     String
   updatedAt DateTime @updatedAt
+}
+
+// 小票模板
+model ReceiptTemplate {
+  id         Int      @id @default(autoincrement())
+  name       String   @default("默认模板")
+  storeName  String   @default("")
+  storePhone String?
+  storeAddr  String?
+  headerText String? // 小票头部自定义文字
+  footerText String? // 小票底部自定义文字
+  showLogo   Int      @default(0)
+  logoUrl    String?
+  paperWidth Int      @default(58) // 纸宽 58mm/80mm
+  fontSize   Int      @default(12)
+  isDefault  Int      @default(1)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+// 打印机配置
+model PrinterConfig {
+  id         Int      @id @default(autoincrement())
+  name       String   @default("默认打印机")
+  ip         String // 打印机IP
+  port       Int      @default(9100)
+  paperWidth Int      @default(58)
+  isDefault  Int      @default(1)
+  status     Int      @default(1)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 }

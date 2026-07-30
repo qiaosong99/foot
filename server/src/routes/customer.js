@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const prisma = require('../services/prisma');
-const { notifyKitchenNewOrder } = require('../socket');
+const { notifyKitchenNewOrder, notifySettleRequest } = require('../socket');
 
 // 获取装修配置（客户端无需登录）
 router.get('/decoration', async (req, res) => {
@@ -176,6 +176,43 @@ router.get('/orders', async (req, res) => {
       take: 20
     });
     res.json({ code: 200, message: 'ok', data: orders });
+  } catch (err) {
+    res.status(500).json({ code: 500, message: err.message, data: null });
+  }
+});
+
+// 顾客发起结算请求
+router.post('/orders/request-settle', async (req, res) => {
+  try {
+    const { tableNo } = req.body;
+    if (!tableNo) {
+      return res.json({ code: 400, message: '缺少桌号参数', data: null });
+    }
+    const table = await prisma.diningTable.findUnique({ where: { tableNo } });
+    if (!table) {
+      return res.json({ code: 404, message: '桌台不存在', data: null });
+    }
+
+    // 将该桌所有未结算订单标记为"请求结算"
+    const updatedOrders = await prisma.order.updateMany({
+      where: { tableId: table.id, settleStatus: 0, status: { not: 4 } },
+      data: { settleStatus: 1 }
+    });
+
+    if (updatedOrders.count === 0) {
+      return res.json({ code: 400, message: '没有可结算的订单', data: null });
+    }
+
+    // 获取更新后的订单列表
+    const orders = await prisma.order.findMany({
+      where: { tableId: table.id, settleStatus: 1 },
+      include: { items: true, table: true }
+    });
+
+    // 通知桌面端/大屏
+    notifySettleRequest(tableNo, orders);
+
+    res.json({ code: 200, message: '结算请求已发送，请等待商家确认', data: { count: updatedOrders.count } });
   } catch (err) {
     res.status(500).json({ code: 500, message: err.message, data: null });
   }

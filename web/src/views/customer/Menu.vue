@@ -148,11 +148,11 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { getMenu, getDecoration } from '../../api'
 import { useCartStore } from '../../stores/cart'
-import { joinTable } from '../../utils/socket'
+import { joinTable, onEvent } from '../../utils/socket'
 
 const route = useRoute()
 const cart = useCartStore()
@@ -207,6 +207,22 @@ if (tableNo.value) {
   cart.setTable(tableNo.value)
   joinTable(tableNo.value)
 }
+
+// 监听结算完成事件，清除订单记录
+let offSettle = null
+if (tableNo.value) {
+  offSettle = onEvent('settle_complete', (data) => {
+    if (data.tableNo === tableNo.value) {
+      sessionStorage.removeItem('current_orders')
+      sessionStorage.removeItem('current_order')
+      sessionOrders.value = []
+    }
+  })
+}
+
+onUnmounted(() => {
+  if (offSettle) offSettle()
+})
 
 onMounted(async () => {
   const [menuRes, decoRes] = await Promise.all([getMenu(), getDecoration()])

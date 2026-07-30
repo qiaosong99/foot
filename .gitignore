@@ -3,5 +3,19 @@ dist/
 *.db
 uploads/
 .qoder/
-foot example/
+example/
 .DS_Store
+
+# Electron
+desktop/dist/
+desktop/release/
+desktop/node_modules/
+
+# UniApp
+waiter-app/node_modules/
+waiter-app/dist/
+waiter-app/unpackage/
+
+# Build outputs
+*.exe
+*.apk

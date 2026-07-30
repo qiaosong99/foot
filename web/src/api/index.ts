@@ -15,6 +15,7 @@ export const getTableInfo = (tableNo) => request.get(`/customer/table/${tableNo}
 export const submitOrder = (data) => request.post('/customer/orders', data)
 export const getOrderStatus = (orderNo) => request.get(`/customer/orders/${orderNo}`)
 export const getTableOrders = (tableNo) => request.get('/customer/orders', { params: { tableNo } })
+export const requestSettle = (tableNo) => request.post('/customer/orders/request-settle', { tableNo })
 
 // 后厨 API
 export const getKitchenOrders = (params) => request.get('/kitchen/orders', { params })

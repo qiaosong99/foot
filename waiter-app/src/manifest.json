@@ -1,0 +1,20 @@
+{
+  "name": "服务员点餐",
+  "appid": "",
+  "description": "餐饮点餐系统服务员端",
+  "versionName": "1.0.0",
+  "versionCode": "100",
+  "app-plus": {
+    "usingComponents": true,
+    "splashscreen": { "alwaysShowBeforeRender": true, "waiting": true, "autoclose": true, "delay": 0 },
+    "modules": {},
+    "distribute": {
+      "android": { "permissions": ["<uses-permission android:name=\"android.permission.INTERNET\"/>"] },
+      "ios": {}
+    }
+  },
+  "h5": {
+    "devServer": { "port": 5175 },
+    "router": { "mode": "hash" }
+  }
+}
