@@ -1,8 +1,43 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
-const { printReceipt, testPrint } = require('./print');
+const { spawn } = require('child_process');
+const { printReceipt, testPrint, testConnection } = require('./print');
 
 let mainWindow = null;
+let serverProcess = null;
+
+// 启动内嵌后端服务
+function startServer() {
+  if (app.isPackaged) {
+    // 打包后：用内嵌的 node.exe 运行服务
+    const nodePath = path.join(process.resourcesPath, 'server', 'node.exe');
+    const serverScript = path.join(process.resourcesPath, 'server', 'src', 'app.js');
+    serverProcess = spawn(nodePath, [serverScript], {
+      env: { ...process.env, PORT: '3000' },
+      cwd: path.join(process.resourcesPath, 'server'),
+      stdio: 'ignore'
+    });
+  } else {
+    // 开发模式：用系统 node 运行
+    const serverPath = path.join(__dirname, '../server/src/app.js');
+    serverProcess = spawn('node', [serverPath], {
+      env: { ...process.env, PORT: '3000' },
+      stdio: 'ignore'
+    });
+  }
+  serverProcess.on('error', (err) => {
+    console.error('服务器启动失败:', err.message);
+  });
+  console.log('后端服务已启动 (PID:', serverProcess.pid, ')');
+}
+
+// 停止后端服务
+function stopServer() {
+  if (serverProcess) {
+    serverProcess.kill();
+    serverProcess = null;
+  }
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -15,7 +50,6 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false
     },
-    icon: path.join(__dirname, 'build/icon.ico'),
     title: '餐饮点餐系统'
   });
 
@@ -35,7 +69,7 @@ function createWindow() {
 // IPC: 打印小票
 ipcMain.handle('print-receipt', async (event, data) => {
   try {
-    const result = await printReceipt(data);
+    await printReceipt(data);
     return { success: true, message: '打印成功' };
   } catch (err) {
     return { success: false, message: err.message };
@@ -45,15 +79,29 @@ ipcMain.handle('print-receipt', async (event, data) => {
 // IPC: 测试打印
 ipcMain.handle('test-print', async (event, data) => {
   try {
-    const result = await testPrint(data);
+    await testPrint(data);
     return { success: true, message: '测试打印成功' };
   } catch (err) {
     return { success: false, message: err.message };
   }
 });
 
+// IPC: 测试打印机连接
+ipcMain.handle('test-connection', async (event, data) => {
+  try {
+    return await testConnection(data.ip, data.port);
+  } catch (err) {
+    return { success: false, message: err.message };
+  }
+});
+
 app.whenReady().then(() => {
-  createWindow();
+  // 先启动后端服务
+  startServer();
+  // 等待服务启动后再创建窗口
+  setTimeout(() => {
+    createWindow();
+  }, app.isPackaged ? 2000 : 500);
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -63,7 +111,12 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
+  stopServer();
   if (process.platform !== 'darwin') {
     app.quit();
   }
+});
+
+app.on('before-quit', () => {
+  stopServer();
 });

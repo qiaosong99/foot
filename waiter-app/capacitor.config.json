@@ -1,0 +1,5 @@
+{
+  "appId": "com.restaurant.waiter",
+  "appName": "服务员点餐",
+  "webDir": "dist/build/h5"
+}

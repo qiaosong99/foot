@@ -33,7 +33,11 @@
           </el-form-item>
           <el-form-item>
             <el-button type="primary" @click="savePrinter">保存配置</el-button>
+            <el-button type="info" @click="handleTestConnection">测试连接</el-button>
             <el-button @click="handleTestPrint">测试打印</el-button>
+          </el-form-item>
+          <el-form-item v-if="connResult">
+            <el-alert :type="connSuccess ? 'success' : 'error'" :title="connResult" :closable="false" style="width:100%" />
           </el-form-item>
         </el-form>
       </el-tab-pane>
@@ -167,6 +171,23 @@ const handleTestPrint = async () => {
     else ElMessage.error(result.message)
   } else {
     ElMessage.info('请在桌面端运行以使用打印功能')
+  }
+}
+
+// 连接测试诊断
+const connResult = ref('')
+const connSuccess = ref(false)
+const handleTestConnection = async () => {
+  if (!printerForm.value.ip) { ElMessage.warning('请先填写打印机IP'); return }
+  connResult.value = '连接中...'
+  connSuccess.value = false
+  if (window.electronAPI) {
+    const result = await window.electronAPI.testConnection({ ip: printerForm.value.ip, port: printerForm.value.port })
+    connResult.value = result.message
+    connSuccess.value = result.success
+  } else {
+    connResult.value = '请在桌面端运行以使用连接测试'
+    connSuccess.value = false
   }
 }
 

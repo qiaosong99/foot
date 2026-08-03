@@ -31,15 +31,33 @@
   "build": {
     "appId": "com.restaurant.desktop",
     "productName": "餐饮点餐系统",
+    "directories": {
+      "output": "release"
+    },
     "win": {
       "target": "nsis",
-      "icon": "build/icon.ico"
+      "signAndEditExecutable": false
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true
+      "createDesktopShortcut": true,
+      "shortcutName": "餐饮点餐系统"
     },
+    "extraResources": [
+      {
+        "from": "build/server/",
+        "to": "server/"
+      },
+      {
+        "from": "../admin/dist/",
+        "to": "admin/dist/"
+      },
+      {
+        "from": "../web/dist/",
+        "to": "web/dist/"
+      }
+    ],
     "files": [
       "main.js",
       "preload.js",

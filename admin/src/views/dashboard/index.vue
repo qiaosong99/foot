@@ -54,10 +54,12 @@
         <el-card>
           <template #header>系统信息</template>
           <el-descriptions :column="1" border size="small">
+            <el-descriptions-item label="当前服务器IP"><b style="color:#409EFF">{{ data.serverIP }}</b></el-descriptions-item>
             <el-descriptions-item label="菜品总数">{{ data.totalProducts }}</el-descriptions-item>
             <el-descriptions-item label="桌台总数">{{ data.totalTables }}</el-descriptions-item>
             <el-descriptions-item label="系统状态"><el-tag type="success">运行中</el-tag></el-descriptions-item>
           </el-descriptions>
+          <el-alert type="warning" :closable="false" style="margin-top:12px" title="更换网络环境(如手机热点/WiFi)后，请到《桌台管理》一键刷新二维码，否则顾客扫码无法打开菜单" />
         </el-card>
       </el-col>
     </el-row>

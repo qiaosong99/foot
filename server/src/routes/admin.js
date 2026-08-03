@@ -300,6 +300,53 @@ router.get('/tables/:id/qrcode', authMiddleware, async (req, res) => {
   }
 });
 
+// 获取当前服务器IP的辅助函数
+function getServerIP() {
+  const os = require('os');
+  const interfaces = os.networkInterfaces();
+  let serverIP = 'localhost';
+  for (const name of Object.keys(interfaces)) {
+    for (const iface of interfaces[name]) {
+      if (iface.family === 'IPv4' && !iface.internal) {
+        serverIP = iface.address;
+        break;
+      }
+    }
+  }
+  return serverIP;
+}
+
+// 一键刷新全部桌台二维码（用当前服务器IP重新生成）
+router.put('/tables/qrcode/refresh-all', authMiddleware, async (req, res) => {
+  try {
+    const tables = await prisma.diningTable.findMany();
+    const serverIP = getServerIP();
+    const port = process.env.PORT || 3000;
+
+    const qrDir = path.join(__dirname, '../../uploads/qrcode');
+    if (!fs.existsSync(qrDir)) {
+      fs.mkdirSync(qrDir, { recursive: true });
+    }
+
+    let count = 0;
+    for (const table of tables) {
+      const url = `http://${serverIP}:${port}/c/menu?table=${table.tableNo}`;
+      const qrFilename = `table_${table.tableNo}.png`;
+      const qrPath = path.join(qrDir, qrFilename);
+      await QRCode.toFile(qrPath, url, { width: 300, margin: 2 });
+      await prisma.diningTable.update({
+        where: { id: table.id },
+        data: { qrCodeUrl: `/uploads/qrcode/${qrFilename}` }
+      });
+      count++;
+    }
+
+    res.json({ code: 200, message: `已刷新 ${count} 张二维码，当前服务器IP: ${serverIP}`, data: { count, serverIP } });
+  } catch (err) {
+    res.status(500).json({ code: 500, message: err.message, data: null });
+  }
+});
+
 // ==================== 订单管理 ====================
 router.get('/orders', authMiddleware, async (req, res) => {
   try {
@@ -549,7 +596,8 @@ router.get('/dashboard', authMiddleware, async (req, res) => {
         pendingOrders,
         totalProducts,
         totalTables,
-        busyTables
+        busyTables,
+        serverIP: getServerIP()
       }
     });
   } catch (err) {

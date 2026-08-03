@@ -70,7 +70,19 @@
       <!-- 订单管理 -->
       <div v-if="activeMenu === 'orders'">
         <h4>订单管理</h4>
-        <el-table :data="orders" size="small" stripe>
+        <el-table :data="orders" size="small" stripe row-key="id" @expand-change="onExpand">
+          <el-table-column type="expand">
+            <template #default="{ row }">
+              <div style="padding: 8px 20px;">
+                <div v-for="item in row.items" :key="item.id" style="display:flex;align-items:center;gap:12px;padding:4px 0;">
+                  <span>{{ item.name }}{{ item.specInfo ? `(${item.specInfo})` : '' }}</span>
+                  <span style="color:#999;">x{{ item.quantity }}</span>
+                  <span style="color:#ee0a24;">¥{{ (item.price * item.quantity).toFixed(2) }}</span>
+                  <el-button v-if="row.settleStatus !== 2 && row.status !== 4" size="small" type="danger" text @click="adminRemoveDish(row.id, item)">退菜</el-button>
+                </div>
+              </div>
+            </template>
+          </el-table-column>
           <el-table-column prop="orderNo" label="订单号" width="170" />
           <el-table-column label="桌号" width="60"><template #default="{ row }">{{ row.table?.tableNo }}</template></el-table-column>
           <el-table-column label="类型" width="70"><template #default="{ row }">{{ {dine_in:'堂食',takeout:'外卖',waiter:'服务员'}[row.orderType] }}</template></el-table-column>
@@ -164,7 +176,7 @@
 <script setup>
 import { ref, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getProducts, createProduct, updateProduct, deleteProduct, getCategories, createCategory, updateCategory, deleteCategory, getTables, createTable, updateTable, deleteTable, getOrders } from '../../api'
+import { getProducts, createProduct, updateProduct, deleteProduct, getCategories, createCategory, updateCategory, deleteCategory, getTables, createTable, updateTable, deleteTable, getOrders, removeDish } from '../../api'
 import request from '../../api'
 
 const menuItems = [
@@ -266,6 +278,13 @@ const loadCategories = async () => { const res = await getCategories(); if (res.
 const loadTables = async () => { const res = await getTables(); if (res.code === 200) tables.value = res.data }
 const loadProducts = async () => { const res = await getProducts({ pageSize: 100 }); if (res.code === 200) products.value = res.data.list || [] }
 const loadOrders = async () => { const res = await getOrders({ pageSize: 50 }); if (res.code === 200) orders.value = res.data.list || [] }
+const onExpand = (row, expanded) => { /* 展开时已有items数据 */ }
+const adminRemoveDish = async (orderId, item) => {
+  await ElMessageBox.confirm(`确定退掉「${item.name}」x${item.quantity}？`, '确认退菜', { type: 'warning' })
+  const res = await removeDish(orderId, item.id)
+  if (res.code === 200) { ElMessage.success(`已退菜: ${item.name}`); loadOrders() }
+  else ElMessage.error(res.message)
+}
 const loadDeco = async () => { const res = await request.get('/admin/decoration'); if (res.code === 200) deco.value = res.data }
 
 const loadData = () => {

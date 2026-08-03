@@ -4,7 +4,10 @@
       <template #header>
         <div style="display:flex;justify-content:space-between;align-items:center">
           <span>桌台管理</span>
-          <el-button type="primary" @click="openDialog()">新增桌台</el-button>
+          <div>
+            <el-button type="success" @click="handleRefreshAll">一键刷新全部二维码</el-button>
+            <el-button type="primary" @click="openDialog()">新增桌台</el-button>
+          </div>
         </div>
       </template>
       <el-table :data="list" border stripe>
@@ -58,7 +61,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getTables, addTable, updateTable, deleteTable, getTableQrcode } from '../../api'
+import { getTables, addTable, updateTable, deleteTable, getTableQrcode, refreshAllQrcodes } from '../../api'
 
 const list = ref([])
 const dialogVisible = ref(false)
@@ -69,6 +72,17 @@ const qrData = ref({})
 const loadData = async () => {
   const res = await getTables()
   if (res.code === 200) list.value = res.data
+}
+
+const handleRefreshAll = async () => {
+  await ElMessageBox.confirm('更换网络环境(如热点/WiFi)后需刷新二维码，是否用当前服务器IP重新生成全部桌台二维码？', '提示')
+  const res = await refreshAllQrcodes()
+  if (res.code === 200) {
+    ElMessage.success(res.message)
+    loadData()
+  } else {
+    ElMessage.error(res.message)
+  }
 }
 
 const openDialog = (row) => {

@@ -1,13 +1,19 @@
 const BASE_URL_KEY = 'server_url'
 
 function getBaseUrl() {
-  return uni.getStorageSync(BASE_URL_KEY) || 'http://localhost:3000'
+  return uni.getStorageSync(BASE_URL_KEY) || ''
 }
 
 function request(url, options = {}) {
   return new Promise((resolve, reject) => {
+    const base = getBaseUrl()
+    if (!base) {
+      uni.showToast({ title: '请先在设置中配置服务器地址', icon: 'none' })
+      reject(new Error('服务器地址未配置'))
+      return
+    }
     uni.request({
-      url: getBaseUrl() + '/api' + url,
+      url: base + '/api' + url,
       method: options.method || 'GET',
       data: options.data || {},
       header: { 'Content-Type': 'application/json' },

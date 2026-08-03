@@ -19,3 +19,11 @@ waiter-app/unpackage/
 # Build outputs
 *.exe
 *.apk
+
+# Android
+desktop/build/
+waiter-app/android/.gradle/
+waiter-app/android/build/
+waiter-app/android/app/build/
+waiter-app/android/local.properties
+android-sdk/

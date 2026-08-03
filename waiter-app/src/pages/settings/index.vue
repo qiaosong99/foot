@@ -50,7 +50,7 @@ const testConnection = async () => {
 }
 
 onMounted(() => {
-  serverUrl.value = uni.getStorageSync(BASE_URL_KEY) || 'http://localhost:3000'
+  serverUrl.value = uni.getStorageSync(BASE_URL_KEY) || ''
 })
 </script>
 

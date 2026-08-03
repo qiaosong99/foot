@@ -146,6 +146,39 @@ function sendToPrinter(ip, port, buffer) {
   });
 }
 
+// 测试打印机连接（仅TCP探测，不发送打印数据）
+function testConnection(ip, port) {
+  return new Promise((resolve) => {
+    const socket = new net.Socket();
+    socket.setTimeout(3000);
+
+    socket.connect(port || 9100, ip, () => {
+      socket.destroy();
+      resolve({ success: true, message: `连接成功: ${ip}:${port || 9100} 可正常通信` });
+    });
+
+    socket.on('error', (err) => {
+      socket.destroy();
+      let msg = '';
+      if (err.code === 'ECONNREFUSED') {
+        msg = '连接被拒绝: 打印机可能未开机，或未开启9100端口(请在打印机设置中开启RAW/网络打印)';
+      } else if (err.code === 'ETIMEDOUT' || err.code === 'EHOSTUNREACH') {
+        msg = '连接超时: IP不通，请确认打印机IP填写正确且与电脑在同一局域网';
+      } else if (err.code === 'ENOTFOUND') {
+        msg = 'IP地址格式错误，请填写如 192.168.1.100 的地址';
+      } else {
+        msg = `连接失败: ${err.message}`;
+      }
+      resolve({ success: false, message: msg });
+    });
+
+    socket.on('timeout', () => {
+      socket.destroy();
+      resolve({ success: false, message: '连接超时: 请检查打印机IP是否正确、是否在同一局域网' });
+    });
+  });
+}
+
 // 打印小票
 async function printReceipt(data) {
   const { printer, template, order } = data;
@@ -178,4 +211,4 @@ async function testPrint(data) {
   return true;
 }
 
-module.exports = { printReceipt, testPrint, generateReceiptBuffer };
+module.exports = { printReceipt, testPrint, testConnection, generateReceiptBuffer };
