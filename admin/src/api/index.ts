@@ -21,6 +21,7 @@ export const getTables = () => request.get('/admin/tables')
 export const addTable = (data: any) => request.post('/admin/tables', data)
 export const updateTable = (id: number, data: any) => request.put(`/admin/tables/${id}`, data)
 export const deleteTable = (id: number) => request.delete(`/admin/tables/${id}`)
+export const forceReleaseTable = (id: number) => request.put(`/admin/tables/${id}/force-release`)
 export const getTableQrcode = (id: number) => request.get(`/admin/tables/${id}/qrcode`)
 export const refreshAllQrcodes = () => request.put('/admin/tables/qrcode/refresh-all')
 

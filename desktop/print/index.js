@@ -24,6 +24,54 @@ function encodeText(text) {
   return iconv.encode(text, 'GBK');
 }
 
+// HTML 转义
+function escHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// 生成小票 HTML（用于 Windows 系统打印机静默打印）
+function generateReceiptHtml(template = {}, order = {}) {
+  const width = template.paperWidth === 80 ? 80 : 58;
+  const fontSize = width === 80 ? 12 : 10;
+  const orderTypeText = { dine_in: '堂食', takeout: '外卖', waiter: '服务员点单' };
+  const itemRows = (order.items || []).map(i => {
+    const name = escHtml(i.specInfo ? `${i.name}(${i.specInfo})` : i.name);
+    const sub = (i.subtotal ?? i.price * i.quantity).toFixed(2);
+    return `<tr><td class="name">${name}</td><td class="qty">x${i.quantity}</td><td class="amt">${sub}</td></tr>`;
+  }).join('');
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+    @page { margin: 0; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: ${width}mm; }
+    body { font-family: 'SimSun', 'Courier New', monospace; font-size: ${fontSize}px; color: #000; padding: 2mm; }
+    .store { text-align: center; font-size: ${fontSize + 6}px; font-weight: bold; margin-bottom: 2px; }
+    .center { text-align: center; }
+    .right { text-align: right; font-weight: bold; }
+    .line { border-top: 1px dashed #000; margin: 3px 0; }
+    table { width: 100%; border-collapse: collapse; }
+    td { padding: 1px 0; vertical-align: top; }
+    td.qty { text-align: center; width: 32px; white-space: nowrap; }
+    td.amt { text-align: right; width: 56px; white-space: nowrap; }
+    .bold { font-weight: bold; }
+    p { margin: 1px 0; }
+  </style></head><body>
+    ${template.storeName ? `<div class="store">${escHtml(template.storeName)}</div>` : ''}
+    ${template.storePhone ? `<p class="center">电话: ${escHtml(template.storePhone)}</p>` : ''}
+    ${template.storeAddr ? `<p class="center">${escHtml(template.storeAddr)}</p>` : ''}
+    ${template.headerText ? `<p class="center">${escHtml(template.headerText)}</p>` : ''}
+    <div class="line"></div>
+    <p>单号: ${escHtml(order.orderNo)}</p>
+    <p>桌号: ${escHtml(order.tableNo)}  类型: ${orderTypeText[order.orderType] || '堂食'}</p>
+    <p>时间: ${new Date(order.createdAt).toLocaleString()}</p>
+    <div class="line"></div>
+    <table><tr class="bold"><td>菜名</td><td class="qty">数量</td><td class="amt">小计</td></tr>${itemRows}</table>
+    <div class="line"></div>
+    <p class="right">共${order.itemCount ?? 0}件  合计: ¥${Number(order.totalPrice || 0).toFixed(2)}</p>
+    <div class="line"></div>
+    ${template.footerText ? `<p class="center">${escHtml(template.footerText)}</p>` : ''}
+  </body></html>`;
+}
+
 // 格式化菜品行（名称、数量、小计对齐）
 function formatItemLine(name, qty, subtotal, paperWidth) {
   const maxNameLen = paperWidth === 80 ? 20 : 14;
@@ -190,9 +238,15 @@ async function printReceipt(data) {
   return true;
 }
 
-// 测试打印
+// 测试打印（使用小票模板+示例订单，端到端验证真实打印链路）
 async function testPrint(data) {
-  const { ip, port } = data;
+  const { ip, port, template, order } = data;
+  // 优先用模板+示例订单生成真实小票，无模板时退回内置测试页
+  if (template && order) {
+    const buffer = generateReceiptBuffer({ template, order });
+    await sendToPrinter(ip, port || 9100, buffer);
+    return true;
+  }
   let content = '';
   content += CMD.INIT;
   content += CMD.ALIGN_CT;
@@ -211,4 +265,4 @@ async function testPrint(data) {
   return true;
 }
 
-module.exports = { printReceipt, testPrint, testConnection, generateReceiptBuffer };
+module.exports = { printReceipt, testPrint, testConnection, generateReceiptBuffer, generateReceiptHtml };

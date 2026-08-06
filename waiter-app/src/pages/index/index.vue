@@ -8,11 +8,11 @@
       <view
         v-for="table in tables"
         :key="table.id"
-        :class="['table-card', table.status === 1 ? 'busy' : 'free', table.hasSettleRequest ? 'settle' : '']"
+        :class="['table-card', table.status === 1 ? 'busy' : table.status === 2 ? 'reserved' : 'free', table.hasSettleRequest ? 'settle' : '']"
         @click="goDetail(table)"
       >
         <text class="t-no">{{ table.tableNo }}</text>
-        <text class="t-status">{{ table.hasSettleRequest ? '待结算' : table.status === 1 ? '使用中' : '空闲' }}</text>
+        <text class="t-status">{{ table.hasSettleRequest ? '待结算' : table.status === 1 ? '使用中' : table.status === 2 ? '预订' : '空闲' }}</text>
         <text class="t-amount" v-if="table.status === 1">¥{{ table.totalAmount.toFixed(2) }}</text>
         <text class="t-orders" v-if="table.orderCount > 0">{{ table.orderCount }}单</text>
       </view>
@@ -54,10 +54,12 @@ onShow(() => loadTables())
 .table-grid { display: flex; flex-wrap: wrap; gap: 20rpx; }
 .table-card { width: calc(33.33% - 14rpx); background: #fff; border-radius: 16rpx; padding: 24rpx 16rpx; text-align: center; border: 3rpx solid #eee; }
 .table-card.busy { border-color: #409eff; background: #ecf5ff; }
+.table-card.reserved { border-color: #67c23a; background: #f0f9eb; }
 .table-card.settle { border-color: #e6a23c; background: #fdf6ec; }
 .t-no { display: block; font-size: 36rpx; font-weight: bold; color: #333; }
 .t-status { display: block; font-size: 24rpx; color: #999; margin-top: 8rpx; }
 .table-card.busy .t-status { color: #409eff; }
+.table-card.reserved .t-status { color: #67c23a; }
 .table-card.settle .t-status { color: #e6a23c; font-weight: bold; }
 .t-amount { display: block; font-size: 28rpx; color: #ee0a24; font-weight: bold; margin-top: 8rpx; }
 .t-orders { display: block; font-size: 22rpx; color: #999; margin-top: 4rpx; }

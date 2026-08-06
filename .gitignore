@@ -1,6 +1,8 @@
 node_modules/
 dist/
 *.db
+*.db-shm
+*.db-wal
 uploads/
 .qoder/
 example/
@@ -19,6 +21,8 @@ waiter-app/unpackage/
 # Build outputs
 *.exe
 *.apk
+# 交付物例外：服务员端 APK 随仓库分发（桌面端安装包体积过大不入库，按文档命令自行构建）
+!服务员端.apk
 
 # Android
 desktop/build/

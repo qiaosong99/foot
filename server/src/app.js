@@ -103,4 +103,4 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`========================================`);
 });
 
-module.exports = app;
+module.exports = { app, server };

@@ -6,7 +6,7 @@ function getBaseUrl() {
 
 function request(url, options = {}) {
   return new Promise((resolve, reject) => {
-    const base = getBaseUrl()
+    const base = (getBaseUrl() || '').trim()
     if (!base) {
       uni.showToast({ title: '请先在设置中配置服务器地址', icon: 'none' })
       reject(new Error('服务器地址未配置'))
@@ -16,10 +16,12 @@ function request(url, options = {}) {
       url: base + '/api' + url,
       method: options.method || 'GET',
       data: options.data || {},
+      timeout: 10000,
       header: { 'Content-Type': 'application/json' },
       success: (res) => resolve(res.data),
       fail: (err) => {
-        uni.showToast({ title: '网络连接失败', icon: 'none' })
+        console.error('[request fail]', base + '/api' + url, err)
+        uni.showToast({ title: '网络连接失败: ' + (err.errMsg || '请检查地址'), icon: 'none', duration: 3000 })
         reject(err)
       }
     })

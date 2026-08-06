@@ -37,9 +37,10 @@
           <el-table-column label="状态" width="80">
             <template #default="{ row }"><el-tag size="small" :type="row.status === 1 ? 'warning' : 'success'">{{ row.status === 1 ? '使用中' : '空闲' }}</el-tag></template>
           </el-table-column>
-          <el-table-column label="操作" width="200">
+          <el-table-column label="操作" width="260">
             <template #default="{ row }">
               <el-button size="small" text type="success" @click="showQrCode(row)">二维码</el-button>
+              <el-button v-if="row.status === 1" size="small" text type="warning" @click="forceRelease(row)">强制释放</el-button>
               <el-button size="small" text type="primary" @click="openTableDialog(row)">编辑</el-button>
               <el-button size="small" text type="danger" @click="delTable(row)">删除</el-button>
             </template>
@@ -176,7 +177,7 @@
 <script setup>
 import { ref, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getProducts, createProduct, updateProduct, deleteProduct, getCategories, createCategory, updateCategory, deleteCategory, getTables, createTable, updateTable, deleteTable, getOrders, removeDish } from '../../api'
+import { getProducts, createProduct, updateProduct, deleteProduct, getCategories, createCategory, updateCategory, deleteCategory, getTables, createTable, updateTable, deleteTable, forceReleaseTable, getOrders, removeDish } from '../../api'
 import request from '../../api'
 
 const menuItems = [
@@ -224,6 +225,13 @@ const delTable = async (row) => {
   await ElMessageBox.confirm(`删除桌台「${row.tableNo}」？`, '确认')
   const res = await deleteTable(row.id)
   if (res.code === 200) { ElMessage.success('已删除'); loadTables() } else ElMessage.error(res.message)
+}
+
+// 强制释放桌台
+const forceRelease = async (row) => {
+  await ElMessageBox.confirm(`强制释放「${row.tableNo}」桌？\n该桌所有未结算订单将被取消，桌台置为空闲（适用于0元订单无法结算的场景）`, '强制释放', { type: 'warning' })
+  const res = await forceReleaseTable(row.id)
+  if (res.code === 200) { ElMessage.success(res.message); loadTables() } else ElMessage.error(res.message)
 }
 
 // 二维码

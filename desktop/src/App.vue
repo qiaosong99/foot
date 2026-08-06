@@ -9,6 +9,7 @@
         <router-link to="/screen" class="nav-tab" active-class="active">大屏</router-link>
         <router-link to="/kitchen" class="nav-tab" active-class="active">后厨</router-link>
         <router-link to="/cashier" class="nav-tab" active-class="active">收银</router-link>
+        <router-link to="/refund" class="nav-tab" active-class="active">退菜</router-link>
         <router-link to="/takeout" class="nav-tab" active-class="active">外卖</router-link>
         <router-link to="/admin" class="nav-tab" active-class="active">管理</router-link>
         <router-link to="/settings" class="nav-tab" active-class="active">设置</router-link>

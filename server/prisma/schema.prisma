@@ -179,7 +179,9 @@ model ReceiptTemplate {
 model PrinterConfig {
   id         Int      @id @default(autoincrement())
   name       String   @default("默认打印机")
-  ip         String // 打印机IP
+  printMode  String   @default("network") // network=网络打印机(9100) system=Windows系统打印机
+  deviceName String? // 系统打印机名称（printMode=system时使用）
+  ip         String // 打印机IP（printMode=network时使用）
   port       Int      @default(9100)
   paperWidth Int      @default(58)
   isDefault  Int      @default(1)

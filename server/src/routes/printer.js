@@ -17,13 +17,13 @@ router.get('/config', authMiddleware, async (req, res) => {
 // 保存打印机配置
 router.put('/config', authMiddleware, async (req, res) => {
   try {
-    const { id, name, ip, port, paperWidth, isDefault, status } = req.body;
+    const { id, name, printMode, deviceName, ip, port, paperWidth, isDefault, status } = req.body;
 
     if (id) {
       // 更新
       const config = await prisma.printerConfig.update({
         where: { id },
-        data: { name, ip, port, paperWidth, isDefault, status }
+        data: { name, printMode: printMode || 'network', deviceName: deviceName ?? null, ip: ip || '', port, paperWidth, isDefault, status }
       });
       res.json({ code: 200, message: '更新成功', data: config });
     } else {
@@ -31,7 +31,9 @@ router.put('/config', authMiddleware, async (req, res) => {
       const config = await prisma.printerConfig.create({
         data: {
           name: name || '默认打印机',
-          ip,
+          printMode: printMode || 'network',
+          deviceName: deviceName || null,
+          ip: ip || '',
           port: port || 9100,
           paperWidth: paperWidth || 58,
           isDefault: isDefault ?? 1,

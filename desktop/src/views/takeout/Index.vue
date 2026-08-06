@@ -69,7 +69,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { getMenu, getTables, createTakeoutOrder, getOrders } from '../../api'
 
 const categories = ref([])
@@ -89,13 +89,56 @@ const addToCart = (product) => {
 
 const submitOrder = async () => {
   const items = cart.value.map(i => ({ productId: i.id, quantity: i.qty }))
+  const snapshot = cart.value.map(i => ({ name: i.name, quantity: i.qty, price: i.price, subtotal: i.price * i.qty }))
+  const total = cartTotal.value
+  const count = cart.value.reduce((s, i) => s + i.qty, 0)
   const res = await createTakeoutOrder({ tableNo: selectedTable.value, items })
   if (res.code === 200) {
-    ElMessage.success('外卖订单已提交')
     cart.value = []
     loadTakeoutOrders()
+    // 询问是否打印外卖小票
+    try {
+      await ElMessageBox.confirm('外卖订单已提交，是否打印小票？', '打印小票', {
+        confirmButtonText: '打印小票',
+        cancelButtonText: '不打印',
+        type: 'success'
+      })
+      const order = res.data || {}
+      await printTakeoutReceipt({
+        orderNo: order.orderNo || ('WM' + Date.now()),
+        tableNo: selectedTable.value,
+        orderType: 'takeout',
+        createdAt: order.createdAt || new Date().toISOString(),
+        items: snapshot,
+        totalPrice: total,
+        itemCount: count
+      })
+    } catch {
+      // 选择不打印
+    }
   } else {
     ElMessage.error(res.message)
+  }
+}
+
+// 打印外卖小票（订单信息套入小票模板真实打印）
+const printTakeoutReceipt = async (order) => {
+  if (!window.electronAPI) {
+    ElMessage.info('请在桌面端使用打印功能')
+    return
+  }
+  const printer = JSON.parse(localStorage.getItem('printer_config') || '{}')
+  const template = JSON.parse(localStorage.getItem('receipt_template') || '{}')
+  const configured = printer.printMode === 'system' ? !!printer.deviceName : !!printer.ip
+  if (!configured) {
+    ElMessage.warning('未配置打印机，请到 设置-打印机设置 中配置')
+    return
+  }
+  const printRes = await window.electronAPI.printReceipt({ printer, template, order })
+  if (printRes.success) {
+    ElMessage.success('外卖小票已发送至打印机')
+  } else {
+    ElMessage.error({ message: '打印失败: ' + printRes.message, duration: 6000 })
   }
 }
 

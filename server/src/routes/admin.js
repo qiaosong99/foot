@@ -262,18 +262,8 @@ router.get('/tables/:id/qrcode', authMiddleware, async (req, res) => {
       return res.json({ code: 404, message: '桌台不存在', data: null });
     }
 
-    // 获取服务器IP
-    const os = require('os');
-    const interfaces = os.networkInterfaces();
-    let serverIP = 'localhost';
-    for (const name of Object.keys(interfaces)) {
-      for (const iface of interfaces[name]) {
-        if (iface.family === 'IPv4' && !iface.internal) {
-          serverIP = iface.address;
-          break;
-        }
-      }
-    }
+    // 获取服务器IP（优先使用设置的服务地址）
+    const serverIP = await getQrServerIP();
 
     const port = process.env.PORT || 3000;
     const url = `http://${serverIP}:${port}/c/menu?table=${table.tableNo}`;
@@ -287,8 +277,8 @@ router.get('/tables/:id/qrcode', authMiddleware, async (req, res) => {
     const qrPath = path.join(qrDir, qrFilename);
     await QRCode.toFile(qrPath, url, { width: 300, margin: 2 });
 
-    // 更新数据库
-    const qrCodeUrl = `/uploads/qrcode/${qrFilename}`;
+    // 更新数据库（带时间戳参数，避免前端缓存旧二维码图）
+    const qrCodeUrl = `/uploads/qrcode/${qrFilename}?v=${Date.now()}`;
     await prisma.diningTable.update({
       where: { id: table.id },
       data: { qrCodeUrl }
@@ -316,11 +306,25 @@ function getServerIP() {
   return serverIP;
 }
 
+// 获取二维码使用的服务器地址：优先用桌面端设置里保存的服务地址，否则自动检测
+async function getQrServerIP() {
+  try {
+    const setting = await prisma.setting.findUnique({ where: { key: 'server_address' } });
+    if (setting && setting.value) {
+      const m = /^https?:\/\/([^:/]+)/.exec(setting.value);
+      if (m && m[1] !== 'localhost' && m[1] !== '127.0.0.1') {
+        return m[1];
+      }
+    }
+  } catch (e) { /* ignore */ }
+  return getServerIP();
+}
+
 // 一键刷新全部桌台二维码（用当前服务器IP重新生成）
 router.put('/tables/qrcode/refresh-all', authMiddleware, async (req, res) => {
   try {
     const tables = await prisma.diningTable.findMany();
-    const serverIP = getServerIP();
+    const serverIP = await getQrServerIP();
     const port = process.env.PORT || 3000;
 
     const qrDir = path.join(__dirname, '../../uploads/qrcode');
@@ -336,7 +340,7 @@ router.put('/tables/qrcode/refresh-all', authMiddleware, async (req, res) => {
       await QRCode.toFile(qrPath, url, { width: 300, margin: 2 });
       await prisma.diningTable.update({
         where: { id: table.id },
-        data: { qrCodeUrl: `/uploads/qrcode/${qrFilename}` }
+        data: { qrCodeUrl: `/uploads/qrcode/${qrFilename}?v=${Date.now()}` }
       });
       count++;
     }
@@ -350,10 +354,16 @@ router.put('/tables/qrcode/refresh-all', authMiddleware, async (req, res) => {
 // ==================== 订单管理 ====================
 router.get('/orders', authMiddleware, async (req, res) => {
   try {
-    const { status, tableNo, page = 1, pageSize = 20 } = req.query;
+    const { status, tableNo, startDate, endDate, settleStatus, page = 1, pageSize = 20 } = req.query;
     const where = {};
     if (status !== undefined && status !== '') where.status = parseInt(status);
+    if (settleStatus !== undefined && settleStatus !== '') where.settleStatus = parseInt(settleStatus);
     if (tableNo) where.table = { tableNo: { contains: tableNo } };
+    if (startDate || endDate) {
+      where.createdAt = {};
+      if (startDate) where.createdAt.gte = new Date(startDate + 'T00:00:00');
+      if (endDate) where.createdAt.lte = new Date(endDate + 'T23:59:59.999');
+    }
 
     const total = await prisma.order.count({ where });
     const list = await prisma.order.findMany({
@@ -734,6 +744,135 @@ router.put('/tables/:id/settle-all', authMiddleware, async (req, res) => {
     notifySettleComplete(table.tableNo, orders);
 
     res.json({ code: 200, message: `已结算 ${orders.length} 笔订单`, data: orders });
+  } catch (err) {
+    res.status(500).json({ code: 500, message: err.message, data: null });
+  }
+});
+
+// 强制释放桌台（取消该桌所有未结算订单并释放桌台，适用于0元订单等无法结算的场景）
+router.put('/tables/:id/force-release', authMiddleware, async (req, res) => {
+  try {
+    const tableId = parseInt(req.params.id);
+    const table = await prisma.diningTable.findUnique({ where: { id: tableId } });
+    if (!table) {
+      return res.json({ code: 404, message: '桌台不存在', data: null });
+    }
+
+    // 取消该桌所有未结算订单
+    const cancelled = await prisma.order.updateMany({
+      where: { tableId, settleStatus: { not: 2 }, status: { not: 4 } },
+      data: { status: 4, settleStatus: 2 }
+    });
+
+    // 释放桌台
+    await prisma.diningTable.update({
+      where: { id: tableId },
+      data: { status: 0 }
+    });
+
+    notifyTableStatusChange({ ...table, status: 0 });
+
+    res.json({ code: 200, message: `桌台已强制释放，取消 ${cancelled.count} 笔订单`, data: null });
+  } catch (err) {
+    res.status(500).json({ code: 500, message: err.message, data: null });
+  }
+});
+
+// ==================== 桌台预订 ====================
+// 标记/取消预订（仅空闲桌可预订，仅预订桌可取消）
+router.put('/tables/:id/reserve', authMiddleware, async (req, res) => {
+  try {
+    const tableId = parseInt(req.params.id);
+    const table = await prisma.diningTable.findUnique({ where: { id: tableId } });
+    if (!table) {
+      return res.json({ code: 404, message: '桌台不存在', data: null });
+    }
+    if (table.status === 1) {
+      return res.json({ code: 400, message: '使用中的桌台不能标记预订', data: null });
+    }
+    const newStatus = table.status === 2 ? 0 : 2;
+    const updated = await prisma.diningTable.update({
+      where: { id: tableId },
+      data: { status: newStatus }
+    });
+    notifyTableStatusChange(updated);
+    res.json({ code: 200, message: newStatus === 2 ? '已标记预订' : '已取消预订', data: updated });
+  } catch (err) {
+    res.status(500).json({ code: 500, message: err.message, data: null });
+  }
+});
+
+// ==================== 报表统计 ====================
+// 周/月报表：period=week|month，anchor=YYYY-MM-DD（所在周/月）
+router.get('/reports/summary', authMiddleware, async (req, res) => {
+  try {
+    const { period = 'week', anchor } = req.query;
+    const anchorDate = anchor ? new Date(anchor + 'T00:00:00') : new Date();
+
+    let start, end, days = [];
+    if (period === 'month') {
+      start = new Date(anchorDate.getFullYear(), anchorDate.getMonth(), 1);
+      end = new Date(anchorDate.getFullYear(), anchorDate.getMonth() + 1, 1);
+    } else {
+      // 周一为一周开始
+      const d = new Date(anchorDate);
+      const dow = (d.getDay() + 6) % 7; // 周一=0
+      start = new Date(d.getFullYear(), d.getMonth(), d.getDate() - dow);
+      end = new Date(start.getTime() + 7 * 86400000);
+    }
+    // 生成每日序列
+    for (let t = start.getTime(); t < end.getTime(); t += 86400000) {
+      const dd = new Date(t);
+      days.push(`${dd.getFullYear()}-${String(dd.getMonth() + 1).padStart(2, '0')}-${String(dd.getDate()).padStart(2, '0')}`);
+    }
+
+    // 拉取区间内已结算订单
+    const orders = await prisma.order.findMany({
+      where: { settleStatus: 2, settledAt: { gte: start, lt: end } },
+      include: { items: true, table: true }
+    });
+
+    const dailyMap = {};
+    days.forEach(d => { dailyMap[d] = { date: d, orderCount: 0, amount: 0 }; });
+    const productMap = {};
+    let totalAmount = 0;
+    let totalCount = 0;
+
+    for (const o of orders) {
+      if (!o.settledAt) continue;
+      const sd = new Date(o.settledAt);
+      const key = `${sd.getFullYear()}-${String(sd.getMonth() + 1).padStart(2, '0')}-${String(sd.getDate()).padStart(2, '0')}`;
+      if (dailyMap[key]) {
+        dailyMap[key].orderCount += 1;
+        dailyMap[key].amount += o.totalPrice || 0;
+      }
+      totalAmount += o.totalPrice || 0;
+      totalCount += 1;
+      for (const item of o.items) {
+        const pk = item.specInfo ? `${item.name}(${item.specInfo})` : item.name;
+        if (!productMap[pk]) productMap[pk] = { name: item.name, specInfo: item.specInfo || null, quantity: 0, amount: 0 };
+        productMap[pk].quantity += item.quantity;
+        productMap[pk].amount += item.price * item.quantity;
+      }
+    }
+
+    const topProducts = Object.values(productMap)
+      .sort((a, b) => b.quantity - a.quantity)
+      .slice(0, 10);
+
+    res.json({
+      code: 200,
+      message: 'ok',
+      data: {
+        period,
+        start: days[0],
+        end: days[days.length - 1],
+        totalAmount: Math.round(totalAmount * 100) / 100,
+        totalCount,
+        daily: days.map(d => ({ ...dailyMap[d], amount: Math.round(dailyMap[d].amount * 100) / 100 })),
+        topProducts: topProducts.map(p => ({ ...p, amount: Math.round(p.amount * 100) / 100 }))
+      }
+    });
   } catch (err) {
     res.status(500).json({ code: 500, message: err.message, data: null });
   }

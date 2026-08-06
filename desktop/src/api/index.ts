@@ -50,6 +50,7 @@ export const getTables = () => request.get('/admin/tables')
 export const createTable = (data) => request.post('/admin/tables', data)
 export const updateTable = (id, data) => request.put(`/admin/tables/${id}`, data)
 export const deleteTable = (id) => request.delete(`/admin/tables/${id}`)
+export const forceReleaseTable = (id) => request.put(`/admin/tables/${id}/force-release`)
 
 // 菜品管理
 export const getProducts = (params) => request.get('/admin/products', { params })
@@ -66,6 +67,9 @@ export const deleteCategory = (id) => request.delete(`/admin/categories/${id}`)
 // 订单管理
 export const getOrders = (params) => request.get('/admin/orders', { params })
 export const updateOrderStatus = (id, status) => request.put(`/admin/orders/${id}/status`, { status })
+
+// 报表
+export const getReportSummary = (params) => request.get('/admin/reports/summary', { params })
 
 // 打印机
 export const getPrinterConfig = () => request.get('/admin/printer/config')
